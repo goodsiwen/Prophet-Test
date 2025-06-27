@@ -65,7 +65,7 @@ const tests = {
       creatorRewardRate: 300 // 3%
     };
     
-    const response = await client.post('/api/platform/initialize', payload);
+    const response = await client.post('/api/betting/platform/initialize', payload);
     console.log('初始化结果:', JSON.stringify(response.data, null, 2));
     
     if (!response.data.success) {
@@ -78,16 +78,17 @@ const tests = {
     const deadline = Math.floor(Date.now() / 1000) + 3600; // 1小时后
     
     const payload = {
-      cardId: 2,
+      cardId: 9,
       assetSymbol: "SOL/USDT",
       currentPrice: 10000000000, // 100 USDT (scaled by 1e8)
       deadline: deadline,
       minBetAmount: 10000000, // 0.1 SOL
       imageUri: "https://cryptologos.cc/logos/solana-sol-logo.png",
-      description: "SOL价格预测 - 预测1小时后SOL/USDT价格走势"
+      description: "SOL价格预测 - 预测1小时后SOL/USDT价格走势",
+      creatorPublicKey: "51L9b87SYtPNApoHgJEyqsiRAA5X4yKobxeQcNH9D7Ce"
     };
     
-    const response = await client.post('/api/betting/prediction-cards', payload);
+    const response = await client.post('/api/betting/prediction-card', payload);
     console.log('创建结果:', JSON.stringify(response.data, null, 2));
     
     if (!response.data.success) {
@@ -98,12 +99,13 @@ const tests = {
   // 下注
   async placeBet() {
     const payload = {
-      cardId: 1,
+      cardId: 9,
       predictedPrice: 11000000000, // 110 USDT
-      betAmount: 50000000 // 0.5 SOL
+      betAmount: 50000000, // 0.5 SOL
+      userPublicKey: "51L9b87SYtPNApoHgJEyqsiRAA5X4yKobxeQcNH9D7Ce"
     };
     
-    const response = await client.post('/api/betting/bets', payload);
+    const response = await client.post('/api/betting/bet', payload);
     console.log('下注结果:', JSON.stringify(response.data, null, 2));
     
     if (!response.data.success) {
@@ -113,13 +115,100 @@ const tests = {
 
   // 获取预测卡列表
   async getPredictionCards() {
-    const response = await client.get('/api/betting/list');
+    const response = await client.get('/api/betting/cards');
     console.log('预测卡列表:', JSON.stringify(response.data, null, 2));
     
-    if (!Array.isArray(response.data)) {
-      throw new Error('获取预测卡列表失败');
+    try {
+      console.log('预测卡列表:', JSON.stringify(response.data, null, 2));
+      
+      // 🔥 修复判断逻辑
+      if (response.data && response.data.success && response.data.data) {
+        console.log('✅ getPredictionCards - 成功');
+        console.log(`📊 统计信息:`);
+        console.log(`   - 总数: ${response.data.stats.total}`);
+        console.log(`   - 活跃: ${response.data.stats.active}`);
+        console.log(`   - 已过期: ${response.data.stats.expired}`);
+        console.log(`   - 已结算: ${response.data.stats.settled}`);
+        console.log(`   - 总奖池: ${response.data.stats.totalPoolAll / 1000000000} SOL`);
+        console.log(`   - 总押注数: ${response.data.stats.totalBetsAll}`);
+        
+        // 显示前5个预测卡的简要信息
+        const cards = response.data.data.slice(0, 5);
+        console.log(`📋 前5个预测卡:`);
+        cards.forEach((card, index) => {
+          console.log(`   ${index + 1}. ID: ${card.id} | ${card.assetSymbol} | 状态: ${card.isActive ? '活跃' : (card.isExpired ? '已过期' : '已结算')} | 奖池: ${card.totalPoolSOL} SOL`);
+        });
+        
+        return true;
+      } else {
+        console.log('❌ getPredictionCards - 失败: 响应格式不正确');
+        return false;
+      } 
+    } catch (error) {
+      console.error('❌ getPredictionCards - 失败:', error.response?.data?.message || error.message);
+      return false;
     }
   },
+
+  async getActiveCards() {  
+    try {
+      console.log('🎯 测试: getActiveCards');
+      
+      const response = await client.get('/api/betting/cards/active');
+      console.log('活跃预测卡:', JSON.stringify(response.data, null, 2));
+      
+      if (response.data && response.data.success && response.data.data) {
+        console.log('✅ getActiveCards - 成功');
+        console.log(`📊 活跃预测卡数量: ${response.data.total}`);
+        
+        const activeCards = response.data.data.slice(0, 3);
+        console.log(`📋 前3个活跃预测卡:`);
+        activeCards.forEach((card, index) => {
+          console.log(`   ${index + 1}. ID: ${card.id} | ${card.assetSymbol} | 截止: ${new Date(parseInt(card.deadline) * 1000).toLocaleString()} | 奖池: ${card.totalPoolSOL} SOL`);
+        });
+        
+        return true;
+      } else {
+        console.log('❌ getActiveCards - 失败: 响应格式不正确');
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ getActiveCards - 失败:', error.response?.data?.message || error.message);
+      return false;
+    }
+  },
+
+  // // 🔥 新增：测试搜索预测卡
+  // async searchCards() {
+  //   try {
+  //     console.log('🎯 测试: searchCards');
+      
+  //     const searchQuery = 'SOL';
+  //     const response = await axios.get(`$/api/betting/cards/search?q=${searchQuery}&limit=10`);
+
+  //     console.log('搜索结果:', JSON.stringify(response.data, null, 2));
+      
+  //     if (response.data && response.data.success && response.data.data) {
+  //       console.log('✅ searchCards - 成功');
+  //       console.log(`🔍 搜索 "${searchQuery}" 找到 ${response.data.total} 个结果`);
+        
+  //       const searchResults = response.data.data.slice(0, 3);
+  //       console.log(`📋 前3个搜索结果:`);
+  //       searchResults.forEach((card, index) => {
+  //         console.log(`   ${index + 1}. ID: ${card.id} | ${card.assetSymbol} | ${card.description}`);
+  //       });
+        
+  //       return true;
+  //     } else {
+  //       console.log('❌ searchCards - 失败: 响应格式不正确');
+  //       return false;
+  //     }
+  //   } catch (error) {
+  //     console.error('❌ searchCards - 失败:', error.response?.data?.message || error.message);
+  //     return false;
+  //   }
+  // },
+
 
   // 获取用户下注记录
   async getUserBets() {

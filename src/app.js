@@ -18,30 +18,42 @@ app.use((req, res, next) => {
   next();
 });
 
-// 快速初始化接口 (便于测试)
-app.post('/api/platform/initialize', async (req, res) => {
-  try {
-    const ProphetService = require('./services/prophetService');
+// // 快速初始化接口 (便于测试)
+// app.post('/api/platform/initialize', async (req, res) => {
+//   try {
+//     const ProphetService = require('./services/prophetService');
     
-    const result = await ProphetService.initializePlatform({
-      platformFeeRate: req.body.platformFeeRate || 500,
-      creatorRewardRate: req.body.creatorRewardRate || 300
-    });
+//     const result = await ProphetService.initializePlatform({
+//       platformFeeRate: req.body.platformFeeRate || 500,
+//       creatorRewardRate: req.body.creatorRewardRate || 300
+//     });
 
-    res.json({
-      success: true,
-      message: '平台初始化成功',
-      data: result,
-      redirect: '使用 /api/betting/platform/* 接口获取更多平台功能'
-    });
-  } catch (error) {
-    console.error('快速初始化错误:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
+//     res.json({
+//       success: true,
+//       message: '平台初始化成功',
+//       data: result,
+//       redirect: '使用 /api/betting/platform/* 接口获取更多平台功能'
+//     });
+//   } catch (error) {
+//     console.error('快速初始化错误:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: error.message
+//     });
+//   }
+// });
+
+// 健康检查
+app.get('/api/betting/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    //wallet: wallet.publicKey.toString(),
+    network: process.env.SOLANA_NETWORK || 'devnet',
+    //programId: programId.toString()
+  });
 });
+
 
 // 路由
 app.use('/api/betting', bettingRoutes);
@@ -53,12 +65,13 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       health: 'GET /api/betting/health',
-      initialize:'POST /api/betting/platform/initialize',
-      createCard: 'POST /api/betting/prediction-cards',
+      initialize:'POST /api/platform/initialize',
+      createCard: 'POST /api/betting/prediction-card',
       getCard: 'GET /api/betting/prediction-cards/:cardId',
-      placeBet: 'POST /api/betting/bets',
+      placeBet: 'POST /api/betting/bet',
       getUserBet: 'GET /api/betting/bets/:cardId/:userPublicKey',
-      getBalance: 'GET /api/betting/balance/:publicKey'
+      getBalance: 'GET /api/betting/balance/:publicKey',
+      cards: 'GET /api/betting/cards'
     }
   });
 });

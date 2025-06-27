@@ -127,8 +127,10 @@ npm install axios colors
 # 运行所有测试
 node test-api.js
 
-# 运行单个测试
+# 运行单个测试 (已经测试通过)
 node test-api.js health
 node test-api.js initializePlatform
 node test-api.js createPredictionCard
 node test-api.js placeBet
+node test-api.js getPredictionCards
+node test-api.js getActiveCards
