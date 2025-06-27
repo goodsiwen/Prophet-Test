@@ -489,6 +489,198 @@ router.get('/cards/stats', async (req, res) => {
   }
 });
 
+// 🏗️ 构建创建预测卡交易
+router.post('/cards/build-create-transaction', async (req, res) => {
+  try {
+    const {
+      cardId, // 🔥 新增：卡片 ID
+      assetSymbol,
+      currentPrice,
+      deadline,
+      minBetAmount,
+      imageUri,
+      description,
+      creatorPublicKey // 🔥 新增：创建者公钥
+    } = req.body;
+
+    // 验证必需参数
+    if (!cardId || !assetSymbol || !currentPrice || !deadline || !creatorPublicKey) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必需参数: cardId, assetSymbol, currentPrice, deadline, creatorPublicKey',
+        requiredFields: ['cardId', 'assetSymbol', 'currentPrice', 'deadline', 'creatorPublicKey']
+      });
+    }
+
+    // 验证数据类型
+    if (isNaN(cardId) || isNaN(currentPrice) || isNaN(deadline)) {
+      return res.status(400).json({
+        success: false,
+        message: 'cardId, currentPrice, deadline 必须是数字'
+      });
+    }
+
+    const result = await ProphetService.buildCreateCardTransaction({
+      cardId: parseInt(cardId),
+      assetSymbol,
+      currentPrice: parseInt(currentPrice),
+      deadline: parseInt(deadline),
+      minBetAmount: parseInt(minBetAmount) || 10000000, // 默认 0.01 SOL
+      imageUri: imageUri || '',
+      description: description || '',
+      creatorPublicKey // 🔥 传递创建者公钥
+    });
+    
+    handleSuccess(res, result, 'buildCreateTransactiom');
+  } catch (error) {
+    handleError(res, error, 'buildCreateTransactiom');
+  }
+});
+
+// 🏗️ 构建下注交易
+router.post('/cards/build-place-bet-transaction', async (req, res) => {
+  try {
+    const {
+      cardId,
+      predictedPrice,
+      betAmount,
+      userPublicKey
+    } = req.body;
+
+    // 验证必需参数
+    if (!cardId || !predictedPrice || !betAmount || !userPublicKey) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必需参数: cardId, predictedPrice, betAmount, userPublicKey',
+        requiredFields: ['cardId', 'predictedPrice', 'betAmount', 'userPublicKey']
+      });
+    }
+
+    // 验证数据类型
+    if (isNaN(cardId) || isNaN(predictedPrice) || isNaN(betAmount)) {
+      return res.status(400).json({
+        success: false,
+        message: 'cardId, predictedPrice, betAmount 必须是数字'
+      });
+    }
+
+    const result = await ProphetService.buildPlaceBetTransaction({
+      cardId: parseInt(cardId),
+      predictedPrice: parseInt(predictedPrice),
+      betAmount: parseInt(betAmount),
+      userPublicKey
+    });
+    
+    handleSuccess(res, result, 'placeBet');
+  } catch (error) {
+    handleError(res, error, 'placeBet');
+  }
+});
+
+// 📊 获取卡片信息
+router.get('/cards/:cardId', async (req, res) => {
+  try {
+    const { cardId } = req.params;
+    const cardInfo = await PredictionService.getCardInfo(parseInt(cardId));
+    
+    if (!cardInfo) {
+      return res.status(404).json({
+        success: false,
+        error: '预测卡不存在'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: cardInfo
+    });
+  } catch (error) {
+    console.error('获取卡片信息失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 🔍 检查用户下注状态
+router.get('/cards/:cardId/bets/:userPublicKey', async (req, res) => {
+  try {
+    const { cardId, userPublicKey } = req.params;
+    const betInfo = await PredictionService.getUserBet(parseInt(cardId), userPublicKey);
+    
+    res.json({
+      success: true,
+      data: betInfo,
+      hasBet: !!betInfo
+    });
+  } catch (error) {
+    console.error('检查用户下注状态失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 📝 交易成功后的回调（用于更新数据库）
+router.post('/transactions/confirm', async (req, res) => {
+  try {
+    const { txHash, type, data } = req.body;
+
+    // 验证交易是否真的成功
+    const txInfo = await connection.getTransaction(txHash, {
+      commitment: 'confirmed'
+    });
+
+    if (!txInfo || txInfo.meta?.err) {
+      return res.status(400).json({
+        success: false,
+        error: '交易未成功或不存在'
+      });
+    }
+
+    // 根据交易类型更新数据库
+    switch (type) {
+      case 'create_card':
+        await updateDatabaseAfterCardCreation(data);
+        break;
+      case 'place_bet':
+        await updateDatabaseAfterBet(data);
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          error: '未知的交易类型'
+        });
+    }
+
+    res.json({
+      success: true,
+      message: '数据库更新成功'
+    });
+  } catch (error) {
+    console.error('确认交易失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 🗄️ 数据库更新函数
+async function updateDatabaseAfterCardCreation(data) {
+  // 更新数据库中的预测卡记录
+  // 这里实现你的数据库更新逻辑
+  console.log('更新数据库 - 创建预测卡:', data);
+}
+
+async function updateDatabaseAfterBet(data) {
+  // 更新数据库中的下注记录
+  // 这里实现你的数据库更新逻辑
+  console.log('更新数据库 - 用户下注:', data);
+}
+
 // ==================== 辅助函数 ====================
 
 /**

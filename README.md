@@ -134,3 +134,6 @@ node test-api.js createPredictionCard
 node test-api.js placeBet
 node test-api.js getPredictionCards
 node test-api.js getActiveCards
+
+node test-api.js buildCreateTransaction
+node test-api.js buildPlaceBetTransaction

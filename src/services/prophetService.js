@@ -1,4 +1,4 @@
-const { PublicKey, SystemProgram, LAMPORTS_PER_SOL, SYSVAR_RENT_PUBKEY } = require('@solana/web3.js');
+const { PublicKey, SystemProgram, LAMPORTS_PER_SOL, SYSVAR_RENT_PUBKEY, Transaction } = require('@solana/web3.js');
 const { getAssociatedTokenAddress } = require('@solana/spl-token');
 const BN = require('bn.js');
 const { 
@@ -774,6 +774,274 @@ class ProphetService {
       };
     } catch (error) {
       throw new Error(`获取系统状态失败: ${error.message}`);
+    }
+  }
+
+  // 升级
+  // 🏗️ 构建创建预测卡交易
+  static async buildCreateCardTransaction(params) {
+    const {
+      cardId,
+      assetSymbol,
+      currentPrice,
+      deadline,
+      minBetAmount,
+      imageUri = '',
+      description = '',
+      creatorPublicKey
+    } = params;
+
+    console.log('🎯 创建预测卡...');
+    console.log('🆔 卡片 ID:', cardId);
+    console.log('📊 资产符号:', assetSymbol);
+    console.log('💰 当前价格:', currentPrice);
+    console.log('⏰ 截止时间:', new Date(deadline * 1000).toLocaleString());
+    console.log('👤 创建者:', creatorPublicKey);
+
+    // 验证创建者参数
+    if (!creatorPublicKey) {
+      throw new Error('创建者公钥 (creatorPublicKey) 是必需参数');
+    }
+
+    // 验证创建者公钥格式
+    let creatorKey;
+    try {
+      creatorKey = new PublicKey(creatorPublicKey);
+    } catch (error) {
+      throw new Error('创建者公钥格式无效');
+    }
+
+    // 检查平台是否已初始化
+    const isInitialized = await this.isPlatformInitialized();
+    if (!isInitialized) {
+      throw new Error('平台尚未初始化，请先初始化平台');
+    }
+
+    const [pricePredictionCardPda] = this.getPricePredictionCardPDA(cardId);
+    const [cardTreasuryPda] = this.getCardTreasuryPDA(cardId);
+
+    try {
+      // 🔑 获取最新的区块哈希
+      console.log('🔄 获取最新区块哈希...');
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      console.log('✅ 获取区块哈希成功:', blockhash.substring(0, 8) + '...');
+      
+      const instruction = await program.methods
+        .createPricePredictionCard(
+          new BN(cardId),
+          assetSymbol,
+          new BN(currentPrice),
+          new BN(deadline),
+          new BN(minBetAmount),
+          imageUri,
+          description
+        )
+        .accounts({
+          pricePredictionCard: pricePredictionCardPda,
+          cardTreasury: cardTreasuryPda,
+          creator: creatorKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .instruction(); // 返回交易对象，不执行
+
+      // 创建交易并设置区块哈希
+      const transaction = new Transaction({
+        recentBlockhash: blockhash,
+        feePayer: creatorKey,
+      });
+
+      // 序列化交易为 base64
+      const serializedTransaction = transaction.serialize({ 
+        requireAllSignatures: false,
+        verifySignatures: false
+      }).toString('base64');
+
+      // 添加指令到交易
+      transaction.add(instruction);
+
+      console.log('✅ 交易构建成功');
+
+      return {
+        success: true,
+        transaction: serializedTransaction,
+        cardId,
+        accounts: {
+          pricePredictionCard: pricePredictionCardPda.toString(),
+          cardTreasury: cardTreasuryPda.toString(),
+          creator: creatorPublicKey
+        },
+        metadata: {
+          //targetAsset,
+          //targetPrice,
+          deadline,
+          estimatedFee: 0.001, // SOL
+          blockhash,
+          lastValidBlockHeight
+        }
+      };
+    } catch (error) {
+      const parsedError = parseAnchorError(error);
+      throw new Error(`创建预测卡失败: ${parsedError.message}`);
+    }
+  }
+
+  // 🏗️ 构建下注交易
+  static async buildPlaceBetTransaction(params) {
+    const { 
+      cardId, 
+      predictedPrice, 
+      betAmount, 
+      userPublicKey
+    } = params;
+
+    console.log('💰 进行押注...');
+    console.log('🆔 卡片 ID:', cardId);
+    console.log('🎯 预测价格:', predictedPrice);
+    console.log('💵 押注金额:', betAmount);
+    console.log('👤 押注用户:', userPublicKey);
+
+    // 验证用户参数
+    if (!userPublicKey) {
+      throw new Error('用户公钥 (userPublicKey) 是必需参数');
+    }
+
+    // 验证用户公钥格式
+    let userKey;
+    try {
+      userKey = new PublicKey(userPublicKey);
+    } catch (error) {
+      throw new Error('用户公钥格式无效');
+    }
+
+    // 检查平台是否已初始化
+    const isInitialized = await this.isPlatformInitialized();
+    if (!isInitialized) {
+      throw new Error('平台尚未初始化，无法进行押注');
+    }
+
+    const [pricePredictionCardPda] = this.getPricePredictionCardPDA(cardId);
+    const [cardTreasuryPda] = this.getCardTreasuryPDA(cardId);
+    const [userPriceBetPda] = this.getUserPriceBetPDA(cardId, userPublicKey);
+    const [nftMintPda] = this.getNftMintPDA(cardId, userPublicKey);
+    
+    const userNftAccount = await getAssociatedTokenAddress(nftMintPda, userKey);
+    const [metadataAccount] = this.getMetadataPDA(nftMintPda);
+
+    try {
+
+      // 🔑 获取最新的区块哈希
+      console.log('🔄 获取最新区块哈希...');
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      console.log('✅ 获取区块哈希成功:', blockhash.substring(0, 8) + '...');
+
+      const instruction = await program.methods
+        .placePriceBet(
+          new BN(cardId),
+          new BN(predictedPrice),
+          new BN(betAmount)
+        )
+        .accounts({
+          pricePredictionCard: pricePredictionCardPda,
+          userPriceBet: userPriceBetPda,
+          cardTreasury: cardTreasuryPda,
+          nftMint: nftMintPda,
+          userNftAccount: userNftAccount,
+          metadataAccount: metadataAccount,
+          user: userKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          metadataProgram: TOKEN_METADATA_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .instruction(); // 返回交易对象，不执行
+
+      // 创建交易并设置区块哈希
+      const transaction = new Transaction({
+        recentBlockhash: blockhash,
+        feePayer: userPublicKey,
+      });
+
+      // 序列化交易为 base64
+      const serializedTransaction = transaction.serialize({ 
+        requireAllSignatures: false,
+        verifySignatures: false
+      }).toString('base64');
+
+      // 添加指令到交易
+      transaction.add(instruction);
+
+      console.log('✅ 交易构建成功');
+
+      return {
+        success: true,
+        transaction: serializedTransaction,
+        cardId,
+        accounts: {
+          userPriceBet: userPriceBetPda.toString(),
+          nftMint: nftMintPda.toString(),
+          userNftAccount: userNftAccount.toString(),
+          user: userPublicKey
+        },
+        metadata: {
+          predictedPrice,
+          betAmount,
+          estimatedFee: 0.002, // SOL (包含 NFT 铸造费用)
+          nftMetadata: {
+            name: `Prediction Bet #${cardId}`,
+            symbol: "PRED",
+            //description: `Bet on ${cardInfo.targetAsset} reaching ${predictedPrice}`
+          },
+          blockhash,
+          lastValidBlockHeight
+        }
+      };
+
+    } catch (error) {
+      const parsedError = parseAnchorError(error);
+      throw new Error(`押注失败: ${parsedError.message}`);
+    }
+   
+  }
+
+  // 🔍 辅助方法：获取卡片信息
+  static async getCardInfo(cardId) {
+    try {
+      const [pricePredictionCardPda] = this.getPricePredictionCardPDA(cardId);
+      const cardAccount = await program.account.pricePredictionCard.fetch(pricePredictionCardPda);
+      
+      const now = Math.floor(Date.now() / 1000);
+      
+      return {
+        id: cardId,
+        targetAsset: cardAccount.targetAsset,
+        targetPrice: cardAccount.targetPrice.toString(),
+        expirationTime: cardAccount.expirationTime.toString(),
+        creator: cardAccount.creator.toString(),
+        totalBets: cardAccount.totalBets.toString(),
+        isExpired: now > cardAccount.expirationTime.toNumber(),
+        isSettled: cardAccount.isSettled,
+        actualPrice: cardAccount.actualPrice?.toString() || null
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  // 🔍 检查用户是否已下注
+  static async getUserBet(cardId, userPublicKey) {
+    try {
+      const [userPriceBetPda] = this.getUserPriceBetPDA(cardId, userPublicKey);
+      const betAccount = await program.account.userPriceBet.fetch(userPriceBetPda);
+      return {
+        cardId: betAccount.cardId.toString(),
+        user: betAccount.user.toString(),
+        predictedPrice: betAccount.predictedPrice.toString(),
+        betAmount: betAccount.betAmount.toString(),
+        isWinner: betAccount.isWinner
+      };
+    } catch (error) {
+      return null; // 用户未下注
     }
   }
 }

@@ -71,7 +71,10 @@ app.get('/', (req, res) => {
       placeBet: 'POST /api/betting/bet',
       getUserBet: 'GET /api/betting/bets/:cardId/:userPublicKey',
       getBalance: 'GET /api/betting/balance/:publicKey',
-      cards: 'GET /api/betting/cards'
+      cards: 'GET /api/betting/cards',
+
+      buildCreateTransactiom: '/cards/build-create-transaction',
+      buildPlaceBetTransaction: '/cards/build-place-bet-transaction'
     }
   });
 });

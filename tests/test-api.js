@@ -178,6 +178,52 @@ const tests = {
     }
   },
 
+
+  // 🏗️ 测试构建创建预测卡交易
+  async buildCreateTransaction() {
+    try {
+      console.log('🎯 测试: buildCreateTransaction');
+      
+      const deadline = Math.floor(Date.now() / 1000) + 3600; // 1小时后
+      
+      const payload = {
+        cardId: 21,
+        assetSymbol: "SOL/USDT",
+        currentPrice: 10000000000, // 100 USDT (scaled by 1e8)
+        deadline: deadline,
+        minBetAmount: 10000000, // 0.1 SOL
+        imageUri: "https://cryptologos.cc/logos/solana-sol-logo.png",
+        description: "SOL价格预测 - 预测1小时后SOL/USDT价格走势",
+        creatorPublicKey: "51L9b87SYtPNApoHgJEyqsiRAA5X4yKobxeQcNH9D7Ce"
+      };
+      
+      const response = await client.post('/api/betting/cards/build-create-transaction', payload);
+      console.log('创建结果:', JSON.stringify(response.data, null, 2));
+      
+      if (!response.data.success) {
+        throw new Error('预测卡创建失败');
+      }
+
+    } catch (error) {
+      console.error('❌ buildCreateTransaction - 失败:', error.response?.data?.error || error.message);
+      return { success: false };
+    }
+  },  
+  async buildPlaceBetTransaction() {
+    const payload = {
+      cardId: 9,
+      predictedPrice: 11000000000, // 110 USDT
+      betAmount: 50000000, // 0.5 SOL
+      userPublicKey: "51L9b87SYtPNApoHgJEyqsiRAA5X4yKobxeQcNH9D7Ce"
+    };
+    
+    const response = await client.post('/api/betting/cards/build-place-bet-transaction', payload);
+    console.log('下注结果:', JSON.stringify(response.data, null, 2));
+    
+    if (!response.data.success) {
+      throw new Error('下注失败');
+    }
+  },
   // // 🔥 新增：测试搜索预测卡
   // async searchCards() {
   //   try {
